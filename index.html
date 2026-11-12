@@ -390,6 +390,7 @@ const prompts = [
 let bag = [];
 let drawn = 0;
 let animating = false;
+let isRevealed = false;
 
 const card = document.getElementById("card");
 const promptEl = document.getElementById("prompt");
@@ -411,27 +412,64 @@ function nextPrompt() {
   return bag.pop();
 }
 
-function drawCard() {
-  promptEl.textContent = nextPrompt();
+function setPrompt(text) {
+  promptEl.textContent = text;
   drawn++;
   counter.textContent = "Card #" + drawn;
 }
 
-drawCard();
+setPrompt(nextPrompt());
 
 function advance() {
   if (animating) return;
-  if (!card.classList.contains("flipped")) {
+
+  // First tap: flip the cover over to reveal the clue (directional flip).
+  if (!isRevealed) {
     card.classList.add("flipped");
+    isRevealed = true;
     return;
   }
+
+  // Subsequent taps: old clue swipes off to the left, new clue slides in from the right.
   animating = true;
-  card.classList.remove("flipped");
-  setTimeout(() => {
-    drawCard();
-    card.classList.add("flipped");
-    setTimeout(() => { animating = false; }, 400);
-  }, 380);
+  const newText = nextPrompt();
+  drawn++;
+  counter.textContent = "Card #" + drawn;
+
+  // Fly the current (old) card out to the left, still showing the old clue.
+  const out = card.animate(
+    [
+      { transform: "rotateY(180deg) translateX(0%)", opacity: 1 },
+      { transform: "rotateY(180deg) translateX(-150%)", opacity: 0 }
+    ],
+    { duration: 340, easing: "ease-in", fill: "forwards" }
+  );
+
+  out.onfinish = () => {
+    // Release the out-animation so it doesn't hold the transform, then reset
+    // the card to the starting position for the in-animation (offscreen right).
+    out.cancel();
+    promptEl.textContent = newText;
+    card.style.transition = "none";
+    card.style.transform = "rotateY(180deg) translateX(150%)";
+    card.style.opacity = "0";
+
+    const inn = card.animate(
+      [
+        { transform: "rotateY(180deg) translateX(150%)", opacity: 0 },
+        { transform: "rotateY(180deg) translateX(0%)", opacity: 1 }
+      ],
+      { duration: 380, easing: "ease-out", fill: "forwards" }
+    );
+    inn.onfinish = () => {
+      // Rest at base state (CSS .flipped = rotateY(180deg), opacity 1, translateX 0).
+      inn.cancel();
+      card.style.transition = "";
+      card.style.transform = "";
+      card.style.opacity = "";
+      animating = false;
+    };
+  };
 }
 
 nextBtn.addEventListener("click", advance);
