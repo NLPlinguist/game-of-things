@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Game of Things - flip the card to reveal a clue.">
+<title>Game of Things</title>
+<style>
+  :root {
+    --bg1: #0b1020;
+    --bg2: #1b2340;
+    --accent: #ffd166;
+    --card-front: linear-gradient(155deg, #243b6b, #3a5ca8);
+    --card-back: linear-gradient(155deg, #141d3a, #23325c);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    background: radial-gradient(circle at 20% 20%, var(--bg2), var(--bg1) 70%);
+    color: #fff;
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    overflow: hidden;
+    padding: 20px;
+  }
+
+  header { text-align: center; margin-bottom: 22px; }
+  header h1 {
+    font-size: clamp(1.6rem, 4vw, 2.4rem);
+    letter-spacing: 3px;
+    font-weight: 800;
+  }
+  header p { opacity: 0.7; font-size: 0.95rem; margin-top: 6px; }
+
+  .card-scene { perspective: 1400px; }
+  .card {
+    width: min(78vw, 360px);
+    height: min(86vw, 480px);
+    position: relative;
+    transform-style: preserve-3d;
+    transition: transform 0.7s cubic-bezier(0.4, 0.0, 0.2, 1);
+    cursor: pointer;
+  }
+  .card.flipped { transform: rotateY(180deg); }
+
+  .card-face {
+    position: absolute;
+    inset: 0;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    border-radius: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 28px;
+    box-shadow: 0 18px 45px rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .card-front { background: var(--card-front); transform: rotateY(0deg); }
+  .card-back { background: var(--card-back); transform: rotateY(180deg); }
+
+  .card-front .icon { font-size: 3.4rem; margin-bottom: 14px; }
+  .card-front .title { font-size: 1.4rem; font-weight: 800; letter-spacing: 2px; }
+  .card-front .tap { margin-top: 10px; font-size: 0.9rem; opacity: 0.85; letter-spacing: 1px; }
+
+  .card-back .label {
+    font-size: 0.72rem;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    opacity: 0.6;
+    margin-bottom: 16px;
+  }
+  .card-back .prompt {
+    font-size: clamp(1.2rem, 3.2vw, 1.6rem);
+    line-height: 1.5;
+    text-align: center;
+    font-weight: 600;
+  }
+
+  .controls { margin-top: 26px; display: flex; gap: 12px; }
+  button {
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    color: #fff;
+    padding: 12px 26px;
+    border-radius: 12px;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  button:hover { background: rgba(255, 255, 255, 0.24); }
+  .hint { margin-top: 10px; font-size: 0.8rem; opacity: 0.55; text-align: center; }
+  .counter { margin-top: 6px; font-size: 0.8rem; opacity: 0.5; text-align: center; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Game of Things</h1>
+    <p>Flip the card to reveal your clue</p>
+  </header>
+
+  <div class="card-scene">
+    <div class="card" id="card">
+      <div class="card-face card-front">
+        <div class="icon">🎴</div>
+        <div class="title">Game of Things</div>
+        <div class="tap">Tap to flip</div>
+      </div>
+      <div class="card-face card-back">
+        <div class="label">Your clue</div>
+        <div class="prompt" id="prompt"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button id="nextBtn">New Card</button>
+  </div>
+  <div class="hint">Swipe the card, tap it, or press Space for another clue</div>
+  <div class="counter" id="counter"></div>
+
+<script>
+const prompts = [
+  "Things you do when you're bored",
+  "Things you do when you're sad",
+  "Things you do when you're happy",
+  "Things you do when you're nervous",
+  "Things you do when you're alone",
+  "Things you do when you're tired",
+  "Things you do when you're hungry",
+  "Things you do when you're cold",
+  "Things you do when you're hot",
+  "Things you do when you're sick",
+  "Things you do when you're drunk",
+  "Things you do when you're angry",
+  "Things you do when you're excited",
+  "Things you do when you're scared",
+  "Things you do when you're embarrassed",
+  "Things you do when you're lost",
+  "Things you do when you're in the car",
+  "Things you do when you're at a party",
+  "Things you do when you're at a concert",
+  "Things you do when you're at the beach",
+  "Things you do when you're at the movies",
+  "Things you do when you're at a wedding",
+  "Things you do when you're at work",
+  "Things you do when you're at school",
+  "Things you do when you're at a restaurant",
+  "Things you do when you're at the grocery store",
+  "Things you do when you're at the gym",
+  "Things you do when you're at the pool",
+  "Things you do when you're at the airport",
+  "Things you do when you're on an airplane",
+  "Things you do when you're on a road trip",
+  "Things you do when you're camping",
+  "Things you do when you're fishing",
+  "Things you do when you're skiing",
+  "Things you do when you're hiking",
+  "Things you do when you're swimming",
+  "Things you do when you're driving",
+  "Things you do when you're walking",
+  "Things you do when you're running",
+  "Things you do when you're dancing",
+  "Things you do when you're singing",
+  "Things you do when you're cooking",
+  "Things you do when you're baking",
+  "Things you do when you're cleaning",
+  "Things you do when you're gardening",
+  "Things you do when you're shopping",
+  "Things you do when you're on your phone",
+  "Things you do when you're on social media",
+  "Things you do when you're texting",
+  "Things you do when you're gaming",
+  "Things you do when you're watching TV",
+  "Things you do when you're reading",
+  "Things you do when you're studying",
+  "Things you do when nobody's watching",
+  "Things you do when you're a kid",
+  "Things you do when you're a teenager",
+  "Things you do when you're in bed",
+  "Things you do when you're waking up",
+  "Things you do when you're falling asleep",
+  "Things you do when you're in the shower",
+  "Things you do while sitting on the toilet",
+  "Things you do while brushing your teeth",
+  "Things you do while washing dishes",
+  "Things you do while doing laundry",
+  "Things you do while folding laundry",
+  "Things you do while mowing the lawn",
+  "Things you do while raking leaves",
+  "Things you do while trimming your nails",
+  "Things you do while shaving",
+  "Things you do while making your bed",
+  "Things you do while cooking dinner",
+  "Things you do while waiting for food",
+  "Things you do while in line",
+  "Things you do while at the dentist",
+  "Things you do while at the doctor",
+  "Things you do while at the vet",
+  "Things you do while at the barber",
+  "Things you do while at the salon",
+  "Things you do while at the spa",
+  "Things you do while at the park",
+  "Things you do while at the playground",
+  "Things you do while at the zoo",
+  "Things you do while at the aquarium",
+  "Things you do while at the museum",
+  "Things you do while at the library",
+  "Things you do while at the bookstore",
+  "Things you do while at the movie theater",
+  "Things you do while at the casino",
+  "Things you do while at the racetrack",
+  "Things you do while at the stadium",
+  "Things you do while at the festival",
+  "Things you do while at the fair",
+  "Things you do while at the carnival",
+  "Things you do while at the amusement park",
+  "Things you do at a birthday party",
+  "Things you do at a graduation",
+  "Things you do at a funeral",
+  "Things you do at a sports game",
+  "Things you do at a football game",
+  "Things you do at a basketball game",
+  "Things you do at a baseball game",
+  "Things you do at a soccer game",
+  "Things you do at a rodeo",
+  "Things you should do before you die",
+  "Things you should do at least once",
+  "Things you should do while you're young",
+  "Things you should try before you're 30",
+  "Things you should see before you die",
+  "Things you should visit before you die",
+  "Things you should eat before you die",
+  "Things you should own before you die",
+  "Things you should build before you die",
+  "Things you should make before you die",
+  "Things you should write before you die",
+  "Things you should learn before you retire",
+  "Things you should learn before you die",
+  "Things you should unlearn before you die",
+  "Things you should stop doing",
+  "Things you should start doing",
+  "Things you should fix around the house",
+  "Things you should organize",
+  "Things you should declutter",
+  "Things you should throw away",
+  "Things you should donate",
+  "Things you should hide",
+  "Things you should share",
+  "Things you should save",
+  "Things you should bookmark",
+  "Things you should subscribe to",
+  "Things you should follow",
+  "Things you should unfollow",
+  "Things you should mute",
+  "Things you should ignore",
+  "Things you should worry about",
+  "Things you should stop worrying about",
+  "Things you should complain about",
+  "Things you should appreciate",
+  "Things you should be grateful for",
+  "Things you should be proud of",
+  "Things you should celebrate",
+  "Things you should let go of",
+  "Things you should hold on to",
+  "Things you should break",
+  "Things you should repair",
+  "Things you should create",
+  "Things you should draw",
+  "Things you should paint",
+  "Things you should sculpt",
+  "Things you should sew",
+  "Things you should knit",
+  "Things you should crochet",
+  "Things you should cook",
+  "Things you should bake",
+  "Things you should make for breakfast",
+  "Things you should make for dinner",
+  "Things you should make for lunch",
+  "Things you should make for dessert",
+  "Things you should make for snacks",
+  "Things you should photograph",
+  "Things you should video",
+  "Things you should document",
+  "Things you should record",
+  "Things you should film",
+  "Things you shouldn't do at parties",
+  "Things you shouldn't say at weddings",
+  "Things you shouldn't bring to the beach",
+  "Things you shouldn't bring to a party",
+  "Things you shouldn't bring to a wedding",
+  "Things you shouldn't bring on an airplane",
+  "Things you shouldn't bring to work",
+  "Things you shouldn't bring to school",
+  "Things you shouldn't bring to a camping trip",
+  "Things you shouldn't bring on a road trip",
+  "Things you shouldn't leave home without",
+  "Things you shouldn't keep in your car",
+  "Things you shouldn't eat after 10pm",
+  "Things you shouldn't eat when you're sick",
+  "Things you shouldn't say to your boss",
+  "Things you shouldn't say to your parents",
+  "Things you shouldn't say to your friends",
+  "Things you shouldn't say to strangers",
+  "Things you shouldn't say at a funeral",
+  "Things you shouldn't say at a wedding",
+  "Things you shouldn't post online",
+  "Things you shouldn't share with strangers",
+  "Things you shouldn't tell your parents",
+  "Things you shouldn't tell your best friend",
+  "Things you shouldn't tell your significant other",
+  "Things you shouldn't admit",
+  "Things you shouldn't admit out loud",
+  "Things you shouldn't confess",
+  "Things you shouldn't forgive",
+  "Things you shouldn't forget",
+  "Things you shouldn't apologize for",
+  "Things you shouldn't apologize for publicly",
+  "Things you shouldn't do when you're angry",
+  "Things you shouldn't do when you're drunk",
+  "Things you shouldn't do when you're tired",
+  "Things you shouldn't do when you're bored",
+  "Things you shouldn't do when you're alone",
+  "Things you shouldn't do when you're nervous",
+  "Things you shouldn't do when you're scared",
+  "Things you shouldn't do when you're embarrassed",
+  "Things you secretly love",
+  "Things you secretly hate",
+  "Things you secretly enjoy",
+  "Things you secretly dislike",
+  "Things you secretly miss",
+  "Things you secretly want",
+  "Things you secretly fear",
+  "Things you secretly wish",
+  "Things you secretly hope",
+  "Things you secretly dream about",
+  "Things you secretly plan",
+  "Things you secretly hoard",
+  "Things you secretly steal",
+  "Things you secretly eat",
+  "Things you secretly listen to",
+  "Things you secretly watch",
+  "Things you secretly read",
+  "Things you secretly play",
+  "Things you secretly collect",
+  "Things you secretly keep",
+  "Things you secretly hide",
+  "Things you secretly regret",
+  "Things you secretly admire",
+  "Things you secretly envy",
+  "Things you secretly judge others for",
+  "Things you secretly do at parties",
+  "Things you secretly do at work",
+  "Things you secretly do at home",
+  "Things you secretly do at night",
+  "Things you secretly do in the morning",
+  "Things that annoy you",
+  "Things that irritate you",
+  "Things that upset you",
+  "Things that frustrate you",
+  "Things that disappoint you",
+  "Things that excite you",
+  "Things that amaze you",
+  "Things that surprise you",
+  "Things that scare you",
+  "Things that make you happy",
+  "Things that make you sad",
+  "Things that make you angry",
+  "Things that make you laugh",
+  "Things that make you cry",
+  "Things that make you nervous",
+  "Things that make you anxious",
+  "Things that make you proud",
+  "Things that make you grateful",
+  "Things that make you curious",
+  "Things that make you nostalgic",
+  "Things that make you homesick",
+  "Things that make you feel at home",
+  "Things that make you feel free",
+  "Things that make you feel alive",
+  "Things that make you feel powerful",
+  "Things that make you feel small",
+  "Things that make you feel brave",
+  "Things that make you feel weak",
+  "Things that make you feel calm",
+  "Things that make you feel energetic",
+  "Things you've never flushed and you regret",
+  "Things you've done that you swear you never told anyone",
+  "Things you've done that you're embarrassed about",
+  "Things you've done that you will never repeat",
+  "Things you've done that you wish you hadn't",
+  "Things you've done that you're proud of",
+  "Things you've done that you're ashamed of",
+  "Things you've done that you're grateful for",
+  "Things you've done that you're thankful for",
+  "Things you've done that you're nostalgic about",
+  "Things you've done that you're fond of",
+  "Things you've done that you keep forgetting",
+  "Things you've done that you can't believe you got away with",
+  "Things you've done that make you slightly guilty",
+  "Things you've done that would look weird if seen",
+  "Things you've done that are kind of illegal but you don't care",
+  "Things you've done that would freak your parents out",
+  "Things you've done that would freak your boss out",
+  "Things you've done that would freak your friends out",
+  "Things you've done that would freak your significant other out",
+  "Things you've done that you'd rather keep private",
+  "Things you've done that you'd rather not explain",
+  "Things you've done that you'd rather not relive",
+  "Things you've done that you'd rather forget",
+  "Things you've done that you're a little embarrassed to admit",
+  "Things you've done that you're a little proud of",
+  "Things you've done that you're a little ashamed of",
+  "Things you've done that you're a little nostalgic about",
+  "Things you've done that you're a little fond of"
+];
+
+let bag = [];
+let drawn = 0;
+let animating = false;
+
+const card = document.getElementById("card");
+const promptEl = document.getElementById("prompt");
+const counter = document.getElementById("counter");
+const nextBtn = document.getElementById("nextBtn");
+
+function refill() {
+  bag = prompts.slice();
+  for (let i = bag.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = bag[i];
+    bag[i] = bag[j];
+    bag[j] = tmp;
+  }
+}
+
+function nextPrompt() {
+  if (bag.length === 0) refill();
+  return bag.pop();
+}
+
+function drawCard() {
+  promptEl.textContent = nextPrompt();
+  drawn++;
+  counter.textContent = "Card #" + drawn;
+}
+
+drawCard();
+
+function advance() {
+  if (animating) return;
+  if (!card.classList.contains("flipped")) {
+    card.classList.add("flipped");
+    return;
+  }
+  animating = true;
+  card.classList.remove("flipped");
+  setTimeout(() => {
+    drawCard();
+    card.classList.add("flipped");
+    setTimeout(() => { animating = false; }, 400);
+  }, 380);
+}
+
+nextBtn.addEventListener("click", advance);
+card.addEventListener("click", advance);
+
+let startX = 0;
+let started = false;
+card.addEventListener("touchstart", e => {
+  startX = e.touches[0].clientX;
+  started = true;
+}, { passive: true });
+card.addEventListener("touchend", e => {
+  if (!started) return;
+  started = false;
+  const dx = e.changedTouches[0].clientX - startX;
+  if (Math.abs(dx) > 60) advance();
+});
+
+document.addEventListener("keydown", e => {
+  if (e.key === " " || e.key === "ArrowRight" || e.key === "ArrowLeft") {
+    e.preventDefault();
+    advance();
+  }
+});
+</script>
+</body>
+</html>
